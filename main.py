@@ -58,13 +58,30 @@ def getOpData(opCodeDict, operator):
 
 	return False;
 
+def getLiteralSize(literal):
+	if literal[0] == '=':
+		literal = literal[1:];
+
+	if literal[0] == 'C':
+		return len(literal)-3;
+	elif literal[0] == 'X':
+		return (len(literal)-3)/2;
+	return 0;
+
 def assemPass1(opCodeDict, lines):
 
 	# token list
 	tokenList = [];
 	locctr = 0;
 
+	#  SYMTAB
+	symbolDict = {};
+
+	# literal Pool
+	literalList = [];
+
 	for line in lines:
+
 		token = {};
 		slices = line.split("\t");
 
@@ -89,28 +106,63 @@ def assemPass1(opCodeDict, lines):
 				if slices[1][0] == '+':
 					token["size"] += 1;
 
-			locctr += token["size"];
-
 		# directive
 		elif isDirective(slices[1]):
 
 			if slices[1] == "BYTE" :
-				token["size"] = len(slices[2][0])/2;
+				token["size"] = ( len( slices[2][0] ) -3 ) / 2;
+
 			elif slices[1] == "WORD" :
 				token["size"] = 3;
+
 			elif slices[1] == "RESW" :
 				token["size"] = int(slices[2][0]) * 3;
+
 			elif slices[1] == "RESB" :
 				token["size"] = int(slices[2][0]);
+
 			elif slices[1] == "CSECT" :
 				token["address"] = 0;
 				token["size"] = 0;
 				locctr = 0;
 
-			locctr += token["size"];
+			elif slices[1] == "END" or slices[1] == "LTORG" :
+				# end token append
+				if slices[1] == "END" :
+					tokenList.append(token);
 
-		print( ( "0x%04X" % token["address"]) + " " + str(token["slice"]));
+				for literal in literalList:
+					# make a new token
+					ltrToken = {};
+					ltrToken["slice"] = ["*", "", [literal]];
+					ltrToken["size"] = getLiteralSize(literal);
+					ltrToken["address"] = locctr;
+
+					tokenList.append(ltrToken);
+
+					locctr += ltrToken["size"];
+				#clear the list	
+				literalList = [];
+				continue;
+
+		# symbol
+		if (slices[0] != '') and (slices[0] not in symbolDict) :
+			symbolDict[slices[0]] = locctr;
+
+		# gathering literal
+		if len(slices) >= 3 :
+			if ( slices[2][0] != '' ) and (slices[2][0][0] == '=') and (slices[2][0] not in literalList):
+				literalList.append(slices[2][0]);
+
+
+		locctr += token["size"];
 		tokenList.append(token);
+
+	print(symbolDict);
+	print(literalList);
+
+	for token in tokenList:
+		print( ( "0x%04X" % token["address"] ) + " " + str(token["slice"]));
 
 	pass
 
