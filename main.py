@@ -71,6 +71,27 @@ def getLiteralSize(literal):
 		return (len(literal)-3)/2;
 	return 0;
 
+def parseConst(const):
+	if (len(const) > 0):
+
+		value = 0;
+
+		if const[0] == 'C':
+
+			for i in range(2,len(const)-1):
+
+				c = const[i];
+				value <<= 8;
+				value |= ord(c);
+
+		elif const[0] == 'X':
+
+			hxStr = const[2:-1];
+			value = int(hxStr, 16);
+			pass
+
+		return value;
+
 def generateObjectCode(regDict, opCodeDict, symbolDict, token):
 
 	operator = token["slice"][1];
@@ -87,7 +108,7 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, token):
 
 		# for type 1 and 2
 		if (opType == 1) or (opType == 2) :
-			objCode = opData["opcode"];
+			objCode = int(opData["opcode"]);
 
 			if opType == 2 :
 				objCode <<= 8;
@@ -107,13 +128,10 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, token):
 
 		# for type 3 and 4
 		elif (opType == 3) or (opType == 4) :
-
-			objCode = opData["opcode"];
+			objCode = int(opData["opcode"]);
 
 			indirect = False;
 			immediate = False;
-
-			print(str(token) + " " + str(len(operands)));
 
 			if (len(operands) >= 1 and operands[0] != "") and (operands[0][0] == '@') :
 				
@@ -173,8 +191,12 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, token):
 			return objCode;
 
 	elif isDirective(operator):
-		pass
-	pass
+
+		if (operator is "WORD") or (operator is "BYTE") :
+			objCode = parseConst(operands[0]);
+			return objCode;
+
+	return None;
 
 def assemPass1(opCodeDict, lines):
 
@@ -196,6 +218,10 @@ def assemPass1(opCodeDict, lines):
 		# separate operands (if there's)
 		if len(slices) >= 3:
 			slices[2] = slices[2].split(",");
+
+		# delete comment
+		if len(slices) >= 4:
+			slices.pop(3);
 
 		token["slice"] = slices;
 		token["address"] = locctr;
@@ -293,13 +319,17 @@ def assemPass2(pass1out):
 
 	for token in pass1out["TOKEN"] :
 
-		#print(token);
+		slices = token["slice"];
 
 		if token["size"] != 0 :
 			# make objCode
-			generateObjectCode(regDict, opCodeDict, symbolDict, token);
-			pass 
+			objCode = generateObjectCode(regDict, opCodeDict, symbolDict, token);
 
+			if objCode is not None :
+				token['objCode'] = objCode;
+				print( str(slices) + " " + "\t\t%X"%token['objCode'] );
+			else :
+				print(str(slices) + " " + "*NONE*");
 
 	pass
 
