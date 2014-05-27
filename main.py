@@ -93,7 +93,7 @@ def parseConst(const):
 
 		return value;
 
-def generateObjectCode(regDict, opCodeDict, symbolDict, token):
+def generateObjectCode(regDict, opCodeDict, symbolDict, literalDict, token):
 
 	operator = token["slice"][1];
 	operands = token["slice"][2];
@@ -186,6 +186,10 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, token):
 					disp = addr - (token["address"] + opType);
 				# external symbol
 				# literal
+				elif operands[0][0] == '=':
+					addr = literalDict[operands[0]];
+					disp = addr - (token["address"] + opType);
+
 
 			if opType is 3 :
 				objCode |= (0x00FFF & disp);
@@ -196,13 +200,12 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, token):
 
 	elif isDirective(operator):
 
-		if (operator is "WORD") or (operator is "BYTE") :
+		if (operator == "WORD") or (operator == "BYTE") :
 			objCode = parseConst(operands[0]);
 			return objCode;
 
 	# LITERAL OBJ
 	elif token["slice"][0] == '*' :
-		print("==== LITERAL OBJ " + operands[0]);
 		operands[0] = operands[0][1:];
 		objCode = parseConst(operands[0]);
 		return objCode;
@@ -218,8 +221,9 @@ def assemPass1(opCodeDict, lines):
 	#  SYMTAB
 	symbolDict = {};
 
-	# literal Pool
+	# literal Pool , literal Table
 	literalList = [];
+	literalDict = {};
 
 	for line in lines:
 
@@ -289,6 +293,9 @@ def assemPass1(opCodeDict, lines):
 
 					tokenList.append(ltrToken);
 
+					# literal table
+					literalDict[literal] = ltrToken["address"];
+
 					locctr += ltrToken["size"];
 				#clear the list	
 				literalList = [];
@@ -311,6 +318,7 @@ def assemPass1(opCodeDict, lines):
 	out["SYMTAB"] = symbolDict;
 	out["OPTAB"] = opCodeDict;
 	out["TOKEN"] = tokenList;
+	out["LITTAB"] = literalDict;
 
 	return out;
 
@@ -321,6 +329,7 @@ def assemPass2(pass1out):
 	opCodeDict 	= pass1out["OPTAB"];
 	symbolDict 	= pass1out["SYMTAB"];
 	regDict 	= pass1out["REGTAB"];
+	literalDict = pass1out["LITTAB"];
 
 	for token in pass1out["TOKEN"] :
 
@@ -328,7 +337,7 @@ def assemPass2(pass1out):
 
 		if token["size"] != 0 :
 			# make objCode
-			objCode = generateObjectCode(regDict, opCodeDict, symbolDict, token);
+			objCode = generateObjectCode(regDict, opCodeDict, symbolDict, literalDict, token);
 
 			if objCode is not None :
 				token['objCode'] = objCode;
