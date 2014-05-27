@@ -71,6 +71,7 @@ def getLiteralSize(literal):
 		return (len(literal)-3)/2;
 	return 0;
 
+# parse a literal constant
 def parseConst(const):
 	if (len(const) > 0):
 
@@ -159,7 +160,7 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, token):
 			if (len(operands) >= 2) and (operands[1] == "X") :
 				xbpe |= 1 << 3;
 			# P
-			if (opType != 4) and (not immediate) and (len(operands) >= 1 and operands[0] != "") and ( (token['slice'][0] in symbolDict) or (operands[0][0] == '=') ) :
+			if (opType != 4) and (not immediate) and (len(operands) >= 1 and operands[0] != "") and ( (operands[0] in symbolDict) or (operands[0][0] == '=') ) :
 				xbpe |= 1 << 1;
 			# E
 			if opType == 4 :
@@ -171,7 +172,10 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, token):
 			# disp
 			disp = 0;
 
-			if immediate:
+			if opType is 4 :
+				disp = 0;
+
+			elif immediate:
 				disp = int(operands[0]);
 
 			elif (len(operands) >= 1 and operands[0] != "") :
@@ -179,7 +183,7 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, token):
 				# symbol
 				if operands[0] in symbolDict :
 					addr = symbolDict[operands[0]];
-					disp = addr - (token["address"] - opType);
+					disp = addr - (token["address"] + opType);
 				# external symbol
 				# literal
 
@@ -195,6 +199,13 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, token):
 		if (operator is "WORD") or (operator is "BYTE") :
 			objCode = parseConst(operands[0]);
 			return objCode;
+
+	# LITERAL OBJ
+	elif token["slice"][0] == '*' :
+		print("==== LITERAL OBJ " + operands[0]);
+		operands[0] = operands[0][1:];
+		objCode = parseConst(operands[0]);
+		return objCode;
 
 	return None;
 
@@ -295,12 +306,6 @@ def assemPass1(opCodeDict, lines):
 		locctr += token["size"];
 		tokenList.append(token);
 
-	#print(symbolDict);
-	#print(literalList);
-
-	#for token in tokenList:
-	#	print( ( "0x%04X" % token["address"] ) + " " + str(token["slice"]));
-
 	# pass 1 out
 	out = {};
 	out["SYMTAB"] = symbolDict;
@@ -327,7 +332,7 @@ def assemPass2(pass1out):
 
 			if objCode is not None :
 				token['objCode'] = objCode;
-				print( str(slices) + " " + "\t\t%X"%token['objCode'] );
+				print( str(slices) + " " + (("\t\t%0"+str(token["size"]*2)+"X")%token['objCode']) );
 			else :
 				print(str(slices) + " " + "*NONE*");
 
@@ -341,14 +346,16 @@ def main():
 	registerDict['S'] = 4; registerDict['T'] = 5; registerDict['F'] = 6;
 
 	opCodeDict = initInstFile("inst.txt");
-	#print(opCodeDict);
 	lines = initInputFile("input.txt");
-	#print(lines);
 
 	pass1out = assemPass1(opCodeDict, lines);
-
+	
 	pass1out["REGTAB"] = registerDict;
-	#print(pass1out);
+
+	print(pass1out["SYMTAB"]);
+
 	pass2out = assemPass2(pass1out);
+
+
 
 main();
