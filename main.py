@@ -93,7 +93,7 @@ def parseConst(const):
 
 		return value;
 
-def generateObjectCode(regDict, opCodeDict, symbolDict, literalDict, token):
+def generateObjectCode(regDict, opCodeDict, symbolDict, literalDict, extref, controlSection, token):
 
 	operator = token["slice"][1];
 	operands = token["slice"][2];
@@ -175,6 +175,10 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, literalDict, token):
 			if opType is 4 :
 				disp = 0;
 
+				# add modif
+				MStr = "M%06X05+%s"%(token["address"] + 1, operands[0]);
+				controlSection["MODIFICATIONS"].append(MStr);
+
 			elif immediate:
 				disp = int(operands[0]);
 
@@ -185,6 +189,8 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, literalDict, token):
 					addr = symbolDict[operands[0]];
 					disp = addr - (token["address"] + opType);
 				# external symbol
+				elif operands[0] in extref :
+					pass
 				# literal
 				elif operands[0][0] == '=':
 					addr = literalDict[operands[0]];
@@ -345,7 +351,6 @@ def assemPass2(pass1out):
 
 	txtRecord = {};
 
-
 	for token in pass1out["TOKEN"] :
 
 		slices = token["slice"];
@@ -360,6 +365,7 @@ def assemPass2(pass1out):
 				controlSection["name"] = slices[0];
 				controlSection["startAddr"] = token["address"];
 				controlSection["TEXT"] = [];
+				controlSection["MODIFICATIONS"] = [];
 
 				extdef = [];
 				extref = [];
@@ -395,6 +401,7 @@ def assemPass2(pass1out):
 				controlSection["name"] = slices[0];
 				controlSection["startAddr"] = token["address"];
 				controlSection["TEXT"] = [];
+				controlSection["MODIFICATIONS"] = [];
 
 				extdef = [];
 				extref = [];
@@ -419,7 +426,7 @@ def assemPass2(pass1out):
 		# Generate objCode
 		if token["size"] != 0 :
 
-			objCode = generateObjectCode(regDict, opCodeDict, symbolDict, literalDict, token);
+			objCode = generateObjectCode(regDict, opCodeDict, symbolDict, literalDict, extref, controlSection, token);
 
 			if objCode is not None :
 				token['objCode'] = objCode;
@@ -466,11 +473,15 @@ def makeOutput(pass2out):
 		if "EXTREF" in section:
 			RRecord = "R";
 			for sym in section["EXTREF"]:
-				RRecord += "%-6s"%sym;
+				RRecord += "%-6s" % sym;
 			print(RRecord);
 
 		for txtRecord in section["TEXT"]:
 			print( "T%06X%02X%s" % (txtRecord["startAddr"], len(txtRecord["text"])/2, txtRecord["text"]));
+
+		if "MODIFICATIONS" in section:
+			for mstr in section["MODIFICATIONS"]:
+				print(mstr);
 
 		if _1st:
 			print( "E%06X" % section["startAddr"] );
@@ -501,7 +512,7 @@ def main():
 
 	makeOutput(pass2out);
 
-	#print(pass2out);
+	print(pass2out);
 
 
 main();
