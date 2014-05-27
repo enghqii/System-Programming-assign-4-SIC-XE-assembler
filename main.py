@@ -280,10 +280,7 @@ def assemPass1(opCodeDict, lines):
 				locctr = 0;
 
 			elif slices[1] == "END" or slices[1] == "LTORG" :
-				# end token append
-				if slices[1] == "END" :
-					tokenList.append(token);
-
+				
 				for literal in literalList:
 					# make a new token
 					ltrToken = {};
@@ -299,6 +296,11 @@ def assemPass1(opCodeDict, lines):
 					locctr += ltrToken["size"];
 				#clear the list	
 				literalList = [];
+				
+				# end token append
+				if slices[1] == "END" :
+					tokenList.append(token);
+
 				continue;
 
 		# symbol
@@ -324,26 +326,158 @@ def assemPass1(opCodeDict, lines):
 
 def assemPass2(pass1out):
 
-	# generate objCode
-	pass2out = [];
+	pass2out = {};
+	pass2out["CSECT"] = [];
+	pass2out["SYMTAB"] = pass1out["SYMTAB"];
+
 	opCodeDict 	= pass1out["OPTAB"];
 	symbolDict 	= pass1out["SYMTAB"];
 	regDict 	= pass1out["REGTAB"];
 	literalDict = pass1out["LITTAB"];
 
+	controlSection = {};
+
+	extdef = [];
+	extref = [];
+
+	lineFeed = False;
+	lastToken = None;
+
+	txtRecord = {};
+
+
 	for token in pass1out["TOKEN"] :
 
 		slices = token["slice"];
 
+		# process directive
+		if isDirective(slices[1]) :
+
+			if slices[1] == "START" :
+				
+				# initialise a new Control Section
+				controlSection = {};
+				controlSection["name"] = slices[0];
+				controlSection["startAddr"] = token["address"];
+				controlSection["TEXT"] = [];
+
+				extdef = [];
+				extref = [];
+
+				txtRecord = {};
+				txtRecord["startAddr"] = controlSection["startAddr"];
+				txtRecord["text"] = "";
+
+			elif slices[1] == "EXTDEF" :
+				# setting external definition
+
+				for sym in slices[2]:
+					extdef.append(sym);
+					controlSection["EXTDEF"] = extdef;
+
+				pass
+			elif slices[1] == "EXTREF" :
+				# setting external references
+				
+				for sym in slices[2]:
+					extref.append(sym);
+					controlSection["EXTREF"] = extref;
+				pass
+			elif slices[1] == "CSECT" or slices[1] == "END" :
+				# finalise a new Control section
+
+				controlSection["TEXT"].append(txtRecord);
+				controlSection["sectionSize"] = lastToken["address"] - controlSection["startAddr"] + lastToken["size"];
+				
+				pass2out["CSECT"].append(controlSection);
+
+				controlSection = {};
+				controlSection["name"] = slices[0];
+				controlSection["startAddr"] = token["address"];
+				controlSection["TEXT"] = [];
+
+				extdef = [];
+				extref = [];
+
+				txtRecord = {};
+				txtRecord["startAddr"] = controlSection["startAddr"];
+				txtRecord["text"] = "";
+
+				pass
+			elif (slices[1] == "RESW") or (slices[1] == "RESB") :
+				# force Line feed
+				lineFeed = True;
+				pass
+			elif slices[1] == "EQU" :
+				pass
+
+			elif slices[1] == "END" :
+				# ends up and break
+				break;
+			pass
+
+		# Generate objCode
 		if token["size"] != 0 :
-			# make objCode
+
 			objCode = generateObjectCode(regDict, opCodeDict, symbolDict, literalDict, token);
 
 			if objCode is not None :
 				token['objCode'] = objCode;
-				print( str(slices) + " " + (("\t\t%0"+str(token["size"]*2)+"X")%token['objCode']) );
-			else :
-				print(str(slices) + " " + "*NONE*");
+
+				objStr = ( "%0" + str(token["size"]*2) + "X" ) % token['objCode'];
+
+				if lineFeed == False and len(txtRecord["text"]) + (token["size"]) <= 0x1D *2 :	
+					txtRecord["text"] += objStr;
+				else:
+					# set line feed True
+					lineFeed = True;
+
+				if lineFeed :
+					controlSection["TEXT"].append(txtRecord);
+					txtRecord = {};
+					txtRecord["startAddr"] = token["address"];
+					txtRecord["text"] = objStr;
+					lineFeed = False;
+
+
+				#print( str(slices) + " " + objStr );
+			#else :
+				#print(str(slices) + " " + "*NONE*");
+
+		lastToken = token;
+
+	return pass2out;
+
+def makeOutput(pass2out):
+
+	sections = pass2out["CSECT"];
+	symbolDict = pass2out["SYMTAB"];
+
+	_1st = True;
+	for section in sections :
+		print("H%-6s%06X%06X" % (section["name"], section["startAddr"], section["sectionSize"]));
+
+		if "EXTDEF" in section:
+			DRecord = "D";
+			for sym in section["EXTDEF"]:
+				DRecord += "%-6s%06X"%(sym, symbolDict[sym]);
+			print(DRecord);
+
+		if "EXTREF" in section:
+			RRecord = "R";
+			for sym in section["EXTREF"]:
+				RRecord += "%-6s"%sym;
+			print(RRecord);
+
+		for txtRecord in section["TEXT"]:
+			print( "T%06X%02X%s" % (txtRecord["startAddr"], len(txtRecord["text"])/2, txtRecord["text"]));
+
+		if _1st:
+			print( "E%06X" % section["startAddr"] );
+			_1st = False;
+		else:
+			print("E");
+		print("");
 
 	pass
 
@@ -361,10 +495,13 @@ def main():
 	
 	pass1out["REGTAB"] = registerDict;
 
-	print(pass1out["SYMTAB"]);
+	#print(pass1out["SYMTAB"]);
 
 	pass2out = assemPass2(pass1out);
 
+	makeOutput(pass2out);
+
+	#print(pass2out);
 
 
 main();
