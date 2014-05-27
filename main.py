@@ -446,12 +446,13 @@ def assemPass2(pass1out):
 					txtRecord["text"] = objStr;
 					lineFeed = False;
 
-
-				#print( str(slices) + " " + objStr );
-			#else :
-				#print(str(slices) + " " + "*NONE*");
-
 		lastToken = token;
+
+		if 'objCode' in token:
+			objStr = ( "%0" + str(token["size"]*2) + "X" ) % token['objCode'];
+			print(("%04X"%token["address"]) + " " + str(token["slice"]) + "\t\t" + objStr);
+		else:
+			print(("%04X"%token["address"]) + " " + str(token["slice"]));
 
 	return pass2out;
 
