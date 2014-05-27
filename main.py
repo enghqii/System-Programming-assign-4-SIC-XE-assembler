@@ -207,6 +207,17 @@ def generateObjectCode(regDict, opCodeDict, symbolDict, literalDict, extref, con
 	elif isDirective(operator):
 
 		if (operator == "WORD") or (operator == "BYTE") :
+
+			if ('-' in operands[0]) or ('+' in operands[0]):
+				symbols = operands[0].split("-");
+
+				MStr = "M%06X06+%s"%(token["address"] + 1, symbols[0]);
+				controlSection["MODIFICATIONS"].append(MStr);
+
+				MStr = "M%06X06-%s"%(token["address"] + 1, symbols[1]);
+				controlSection["MODIFICATIONS"].append(MStr);
+
+
 			objCode = parseConst(operands[0]);
 			return objCode;
 
@@ -275,10 +286,6 @@ def assemPass1(opCodeDict, lines):
 
 			elif slices[1] == "RESB" :
 				token["size"] = int(slices[2][0]);
-
-			elif slices[1] == "EQU" :
-				# TODO
-				pass
 
 			elif slices[1] == "CSECT" :
 				token["address"] = 0;
@@ -415,13 +422,6 @@ def assemPass2(pass1out):
 				# force Line feed
 				lineFeed = True;
 				pass
-			elif slices[1] == "EQU" :
-				pass
-
-			elif slices[1] == "END" :
-				# ends up and break
-				break;
-			pass
 
 		# Generate objCode
 		if token["size"] != 0 :
@@ -455,42 +455,44 @@ def assemPass2(pass1out):
 
 	return pass2out;
 
-def makeOutput(pass2out):
+def makeOutput(pass2out, fileName):
+
+	output = open(fileName, "w");
 
 	sections = pass2out["CSECT"];
 	symbolDict = pass2out["SYMTAB"];
 
 	_1st = True;
 	for section in sections :
-		print("H%-6s%06X%06X" % (section["name"], section["startAddr"], section["sectionSize"]));
+		output.write("H%-6s%06X%06X" % (section["name"], section["startAddr"], section["sectionSize"]) + "\n");
 
 		if "EXTDEF" in section:
 			DRecord = "D";
 			for sym in section["EXTDEF"]:
 				DRecord += "%-6s%06X"%(sym, symbolDict[sym]);
-			print(DRecord);
+			output.write(DRecord + "\n");
 
 		if "EXTREF" in section:
 			RRecord = "R";
 			for sym in section["EXTREF"]:
 				RRecord += "%-6s" % sym;
-			print(RRecord);
+			output.write(RRecord + "\n");
 
 		for txtRecord in section["TEXT"]:
-			print( "T%06X%02X%s" % (txtRecord["startAddr"], len(txtRecord["text"])/2, txtRecord["text"]));
+			output.write( "T%06X%02X%s" % (txtRecord["startAddr"], len(txtRecord["text"])/2, txtRecord["text"]) + "\n");
 
 		if "MODIFICATIONS" in section:
 			for mstr in section["MODIFICATIONS"]:
-				print(mstr);
+				output.write(mstr + "\n");
 
 		if _1st:
-			print( "E%06X" % section["startAddr"] );
+			output.write( "E%06X" % section["startAddr"] + "\n" );
 			_1st = False;
 		else:
-			print("E");
-		print("");
+			output.write("E" + "\n");
+		output.write("" + "\n");
 
-	pass
+	output.close();
 
 # main routine
 def main():
@@ -510,9 +512,6 @@ def main():
 
 	pass2out = assemPass2(pass1out);
 
-	makeOutput(pass2out);
-
-	print(pass2out);
-
+	makeOutput(pass2out, "output.txt");
 
 main();
