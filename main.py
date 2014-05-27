@@ -39,6 +39,9 @@ def initInputFile(inputFileName):
 
 def isOperator(opCodeDict, operator):
 
+	if len(operator) < 1:
+		return False;
+
 	if operator[0] == '+':
 		operator = operator[1:];
 
@@ -67,6 +70,111 @@ def getLiteralSize(literal):
 	elif literal[0] == 'X':
 		return (len(literal)-3)/2;
 	return 0;
+
+def generateObjectCode(regDict, opCodeDict, symbolDict, token):
+
+	operator = token["slice"][1];
+	operands = token["slice"][2];
+
+	if isOperator(opCodeDict, operator) :
+
+		opData = getOpData(opCodeDict, operator);
+		opType = opData["type"];
+
+		# extended ?
+		if operator[0] == '+' :
+			opType = 4;
+
+		# for type 1 and 2
+		if (opType == 1) or (opType == 2) :
+			objCode = opData["opcode"];
+
+			if opType == 2 :
+				objCode <<= 8;
+
+				if len(operands) >= 1 :
+
+					r1 = regDict[operands[0]];
+					r1 <<= 4;
+					objCode |= r1;
+
+				if len(operands) >= 2 :
+
+					r2 = regDict[operands[1]];
+					objCode |= r2;
+
+			return objCode;
+
+		# for type 3 and 4
+		elif (opType == 3) or (opType == 4) :
+
+			objCode = opData["opcode"];
+
+			indirect = False;
+			immediate = False;
+
+			print(str(token) + " " + str(len(operands)));
+
+			if (len(operands) >= 1 and operands[0] != "") and (operands[0][0] == '@') :
+				
+				objCode |= 0x0002;
+				indirect = True;
+
+				operands[0] = operands[0][1:];
+
+			elif (len(operands) >= 1 and operands[0] != "") and (operands[0][0] == '#') :
+				
+				objCode |= 0x0001;
+				immediate = True;
+
+				operands[0] = operands[0][1:];
+
+			else :
+				objCode |= 0x0003;
+
+			objCode <<= 4;
+
+			# XBPE
+			xbpe = 0;
+
+			# X
+			if (len(operands) >= 2) and (operands[1] == "X") :
+				xbpe |= 1 << 3;
+			# P
+			if (opType != 4) and (not immediate) and (len(operands) >= 1 and operands[0] != "") and ( (token['slice'][0] in symbolDict) or (operands[0][0] == '=') ) :
+				xbpe |= 1 << 1;
+			# E
+			if opType == 4 :
+				xbpe |= 1 << 0;
+
+			objCode |= xbpe;
+			objCode <<= 12 if (opType == 3) else 20;
+
+			# disp
+			disp = 0;
+
+			if immediate:
+				disp = int(operands[0]);
+
+			elif (len(operands) >= 1 and operands[0] != "") :
+
+				# symbol
+				if operands[0] in symbolDict :
+					addr = symbolDict[operands[0]];
+					disp = addr - (token["address"] - opType);
+				# external symbol
+				# literal
+
+			if opType is 3 :
+				objCode |= (0x00FFF & disp);
+			elif opType is 4 :
+				objCode |= (0xFFFFF & disp);
+
+			return objCode;
+
+	elif isDirective(operator):
+		pass
+	pass
 
 def assemPass1(opCodeDict, lines):
 
@@ -121,6 +229,10 @@ def assemPass1(opCodeDict, lines):
 			elif slices[1] == "RESB" :
 				token["size"] = int(slices[2][0]);
 
+			elif slices[1] == "EQU" :
+				# TODO
+				pass
+
 			elif slices[1] == "CSECT" :
 				token["address"] = 0;
 				token["size"] = 0;
@@ -154,29 +266,59 @@ def assemPass1(opCodeDict, lines):
 			if ( slices[2][0] != '' ) and (slices[2][0][0] == '=') and (slices[2][0] not in literalList):
 				literalList.append(slices[2][0]);
 
-
 		locctr += token["size"];
 		tokenList.append(token);
 
-	print(symbolDict);
-	print(literalList);
+	#print(symbolDict);
+	#print(literalList);
 
-	for token in tokenList:
-		print( ( "0x%04X" % token["address"] ) + " " + str(token["slice"]));
+	#for token in tokenList:
+	#	print( ( "0x%04X" % token["address"] ) + " " + str(token["slice"]));
 
-	pass
+	# pass 1 out
+	out = {};
+	out["SYMTAB"] = symbolDict;
+	out["OPTAB"] = opCodeDict;
+	out["TOKEN"] = tokenList;
 
-def assemPass2():
+	return out;
+
+def assemPass2(pass1out):
+
+	# generate objCode
+	pass2out = [];
+	opCodeDict 	= pass1out["OPTAB"];
+	symbolDict 	= pass1out["SYMTAB"];
+	regDict 	= pass1out["REGTAB"];
+
+	for token in pass1out["TOKEN"] :
+
+		#print(token);
+
+		if token["size"] != 0 :
+			# make objCode
+			generateObjectCode(regDict, opCodeDict, symbolDict, token);
+			pass 
+
+
 	pass
 
 # main routine
 def main():
+
+	registerDict = {};
+	registerDict['A'] = 0; registerDict['X'] = 1; registerDict['L'] = 2; registerDict['B'] = 3;
+	registerDict['S'] = 4; registerDict['T'] = 5; registerDict['F'] = 6;
 
 	opCodeDict = initInstFile("inst.txt");
 	#print(opCodeDict);
 	lines = initInputFile("input.txt");
 	#print(lines);
 
-	assemPass1(opCodeDict, lines);
+	pass1out = assemPass1(opCodeDict, lines);
+
+	pass1out["REGTAB"] = registerDict;
+	#print(pass1out);
+	pass2out = assemPass2(pass1out);
 
 main();
